@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data files - do not commit large data
+data/raw/
+data/bronze/
+data/silver/
+data/gold/
+data/samples/
+data/raw/
+*.csv
+*.csv.zst
+*.parquet
+
+# Spark
+metastore_db/
+derby.log
+spark-warehouse/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env (keep .env.example in repo)
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# Pipeline state
+data/.ingestion_state.json
+data/.pipeline_metrics.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Docker
+*.pid
