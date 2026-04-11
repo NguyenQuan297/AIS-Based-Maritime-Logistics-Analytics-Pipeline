@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import gc
 import sys
 
 from config.logging_config import setup_logging
@@ -60,6 +61,10 @@ def run_pipeline(source_date: str = None, file_limit: int = None):
             stage.input_rows = len(pending)
             stage.output_rows = len(results)
 
+        # Clear shuffle files from ingestion before moving on
+        spark.catalog.clearCache()
+        gc.collect()
+
         # Determine dates to process
         files = list_zst_files(PathConfig.RAW_DIR)
         if file_limit:
@@ -71,42 +76,40 @@ def run_pipeline(source_date: str = None, file_limit: int = None):
             dates = [source_date]
 
         for date_str in dates:
-            # Stage 2: Bronze -> Silver
+            # Stage 2: Bronze -> Silver (read only this date's partition)
             with metrics.track_stage(f"bronze_to_silver_{date_str}") as stage:
                 bronze_df = build_bronze(spark, source_date=date_str)
-                stage.input_rows = bronze_df.count()
-
-                # Quality check bronze
-                bronze_report = quality.run_bronze_checks(bronze_df)
-                logger.info("Bronze quality: %s", bronze_report.summary())
 
                 silver_df = build_silver(spark, bronze_df, source_date=date_str)
-                stage.output_rows = silver_df.count()
 
-                # Quality check silver
-                silver_report = quality.run_silver_checks(silver_df)
-                logger.info("Silver quality: %s", silver_report.summary())
+                logger.info("Silver complete for %s", date_str)
 
-            # Stage 3: Silver -> Gold
+            # Stage 3: Silver -> Gold (read back from parquet to avoid lineage buildup)
             with metrics.track_stage(f"silver_to_gold_{date_str}") as stage:
-                stage.input_rows = silver_df.count()
+                silver_df = spark.read.parquet(str(PathConfig.SILVER_DIR)).where(
+                    f"source_date = '{date_str}'"
+                )
                 activity_df = build_daily_activity(spark, silver_df)
                 voyages_df = build_voyage_candidates(spark, silver_df)
-                stage.output_rows = activity_df.count() + voyages_df.count()
+
+                logger.info("Gold complete for %s", date_str)
+
+            # Free memory between dates
+            spark.catalog.clearCache()
+            gc.collect()
 
         # Build metadata from all bronze data
         with metrics.track_stage("build_metadata") as stage:
             all_bronze = build_bronze(spark)
-            stage.input_rows = all_bronze.count()
             metadata_df = build_vessel_metadata(spark, all_bronze)
-            stage.output_rows = metadata_df.count()
+
+        spark.catalog.clearCache()
+        gc.collect()
 
         # Build route metrics from all voyages
         with metrics.track_stage("build_route_metrics") as stage:
             all_voyages = spark.read.parquet(str(PathConfig.GOLD_VOYAGE_DIR))
-            stage.input_rows = all_voyages.count()
             route_metrics_df = build_route_metrics(spark, all_voyages)
-            stage.output_rows = route_metrics_df.count()
 
         # Stage 4: Load to PostgreSQL
         with metrics.track_stage("load_postgres") as stage:

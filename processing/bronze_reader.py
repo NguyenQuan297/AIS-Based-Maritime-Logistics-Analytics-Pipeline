@@ -37,6 +37,4 @@ def build_bronze(spark: SparkSession, source_date: str = None) -> DataFrame:
         )
         logger.info("Filtered bronze to source_date=%s", source_date)
 
-    row_count = df.count()
-    logger.info("Bronze layer: %d rows", row_count)
     return df

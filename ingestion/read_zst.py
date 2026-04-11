@@ -50,15 +50,17 @@ def read_zst_to_spark_df(spark, filepath: Path, schema=None):
             reader = reader.option("inferSchema", "true")
 
         df = reader.csv(str(temp_csv))
-        # Cache to release temp file dependency
-        df = df.cache()
-        df.count()  # Force materialization
 
         logger.info("Loaded %d columns from %s", len(df.columns), filepath.name)
+
+        # Don't delete temp dir here -- caller writes to parquet first,
+        # then temp is cleaned up. Return df + temp_dir for cleanup.
+        df._temp_dir = temp_dir
         return df
 
-    finally:
+    except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
 
 
 def read_zst_stream_to_spark(spark, filepath: Path, schema=None):

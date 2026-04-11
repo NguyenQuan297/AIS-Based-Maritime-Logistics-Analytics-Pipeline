@@ -26,13 +26,20 @@ def get_spark_session(app_name: str = None) -> SparkSession:
     spark = (
         SparkSession.builder
         .appName(app_name)
-        .master(Settings.SPARK_MASTER)
-        .config("spark.driver.memory", Settings.SPARK_DRIVER_MEMORY)
-        .config("spark.executor.memory", Settings.SPARK_EXECUTOR_MEMORY)
+        .master("local[4]")
+        .config("spark.driver.memory", "4g")
+        .config("spark.executor.memory", "4g")
         .config("spark.sql.parquet.compression.codec", Settings.PARQUET_COMPRESSION)
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
         .config("spark.sql.adaptive.enabled", "true")
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        # Reduce shuffle partitions to avoid Windows file handle exhaustion
+        .config("spark.sql.shuffle.partitions", "4")
+        .config("spark.default.parallelism", "4")
+        # Reduce open file pressure on Windows
+        .config("spark.shuffle.file.buffer", "64k")
+        .config("spark.reducer.maxSizeInFlight", "24m")
+        .config("spark.shuffle.sort.bypassMergeThreshold", "2")
         .getOrCreate()
     )
 

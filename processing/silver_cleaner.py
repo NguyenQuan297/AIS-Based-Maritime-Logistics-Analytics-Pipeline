@@ -87,10 +87,7 @@ def build_silver(spark: SparkSession, bronze_df: DataFrame, source_date: str) ->
     # Add source_date for partitioning
     df = df.withColumn("source_date", F.lit(source_date))
 
-    row_count = df.count()
-    logger.info("Silver layer: %d rows after cleaning", row_count)
-
-    # Write silver parquet
+    # Write silver parquet (count happens during write, no extra scan)
     output_path = str(PathConfig.SILVER_DIR)
     df.write.mode("append").partitionBy("source_date").parquet(output_path)
     logger.info("Silver data written to %s", output_path)
