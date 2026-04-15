@@ -271,10 +271,4 @@ FROM route_metrics
 ORDER BY metric_date, vessel_count DESC;
 ```
 
-## Future Improvements
 
-- **Port detection** - geofence-based port entry/exit events
-- **Delay detection** - flag abnormal dwell time or slow transit
-- **Route intelligence** - cluster common routes, detect deviations
-- **Streaming** - Kafka-based near real-time ingestion
-- **NLP enrichment** - extract cargo/vessel info from free-text fields (spaCy)
