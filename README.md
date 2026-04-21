@@ -4,7 +4,7 @@ End-to-end data engineering project that turns ~8.7M raw AIS vessel-position rec
 
 ## Live Demo
 
-**[ais-based-maritime-logistics-analytics-pipeline-6dcp6ccp4ygg3l.streamlit.app](https://ais-based-maritime-logistics-analytics-pipeline-6dcp6ccp4ygg3l.streamlit.app/)**
+**[ais-based-maritime-logistics-analytics-pipeline-6dcp6ccp4ygg3l.streamlit.app](https://ais-based-maritime-logistics-analytics-pipeline-99sggipjxkvdz3.streamlit.app/)**
 
 Deployed on Streamlit Community Cloud, fetching Parquet from `s3://ais-maritime-quan` (us-east-2). First load takes ~6s; cached thereafter.
 
