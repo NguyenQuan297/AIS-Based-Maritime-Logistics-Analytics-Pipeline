@@ -8,10 +8,13 @@ Usage:
     streamlit run app.py
 """
 
+import os
+
 import streamlit as st
 import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow.dataset as ds
+import pyarrow.fs as pafs
 import pydeck as pdk
 from pathlib import Path
 
@@ -27,12 +30,47 @@ st.set_page_config(
 
 # ---------------------------------------------------------------------------
 # Data paths
+#
+# Resolution order:
+#   1. If AIS_S3_BUCKET env var (or Streamlit secret) is set → read from S3.
+#   2. Else if data/silver exists → full local pipeline output.
+#   3. Else → committed data/silver_sample fallback.
 # ---------------------------------------------------------------------------
 DATA_DIR = Path(__file__).parent / "data"
-GOLD_DIR = DATA_DIR / "gold"
-# Full silver (~1GB, local dev). Fall back to small committed sample on
-# Streamlit Community Cloud where RAM is limited to 1GB.
-SILVER_DIR = DATA_DIR / "silver" if (DATA_DIR / "silver").exists() else DATA_DIR / "silver_sample"
+
+
+def _get_secret(name: str, default: str = "") -> str:
+    """Read from env var first, then Streamlit secrets. Returns empty string if unset."""
+    val = os.getenv(name)
+    if val:
+        return val
+    try:
+        return st.secrets.get(name, default)
+    except (FileNotFoundError, Exception):
+        return default
+
+
+S3_BUCKET = _get_secret("AIS_S3_BUCKET").removeprefix("s3://").rstrip("/")
+
+if S3_BUCKET:
+    S3_FS = pafs.S3FileSystem(
+        access_key=_get_secret("AWS_ACCESS_KEY_ID") or None,
+        secret_key=_get_secret("AWS_SECRET_ACCESS_KEY") or None,
+        region=_get_secret("AWS_REGION", "ap-southeast-1"),
+    )
+    GOLD_DIR = f"{S3_BUCKET}/gold"
+    SILVER_DIR = f"{S3_BUCKET}/silver_sample"
+else:
+    S3_FS = None
+    GOLD_DIR = DATA_DIR / "gold"
+    SILVER_DIR = (
+        DATA_DIR / "silver" if (DATA_DIR / "silver").exists() else DATA_DIR / "silver_sample"
+    )
+
+
+def _read_parquet(path) -> pd.DataFrame:
+    """Read parquet from either S3 (if S3_FS is set) or local filesystem."""
+    return pq.read_table(str(path), filesystem=S3_FS).to_pandas()
 
 
 # Streamlit >=1.18 uses st.cache_data; older versions fall back to st.cache.
@@ -48,27 +86,26 @@ if cache_data is None:
 # ---------------------------------------------------------------------------
 @cache_data(ttl=600, show_spinner=True)
 def load_activity() -> pd.DataFrame:
-    df = pq.read_table(str(GOLD_DIR / "vessel_daily_activity")).to_pandas()
+    df = _read_parquet(f"{GOLD_DIR}/vessel_daily_activity")
     df["activity_date"] = pd.to_datetime(df["activity_date"]).dt.date
     return df
 
 
 @cache_data(ttl=600, show_spinner=True)
 def load_voyages() -> pd.DataFrame:
-    df = pq.read_table(str(GOLD_DIR / "voyage_candidates")).to_pandas()
-    return df
+    return _read_parquet(f"{GOLD_DIR}/voyage_candidates")
 
 
 @cache_data(ttl=600, show_spinner=True)
 def load_routes() -> pd.DataFrame:
-    df = pq.read_table(str(GOLD_DIR / "route_metrics")).to_pandas()
+    df = _read_parquet(f"{GOLD_DIR}/route_metrics")
     df["metric_date"] = pd.to_datetime(df["metric_date"]).dt.date
     return df
 
 
 @cache_data(ttl=600, show_spinner=True)
 def load_metadata() -> pd.DataFrame:
-    return pq.read_table(str(GOLD_DIR / "vessel_metadata")).to_pandas()
+    return _read_parquet(f"{GOLD_DIR}/vessel_metadata")
 
 
 @cache_data(ttl=600, show_spinner=True)
@@ -76,7 +113,7 @@ def load_silver_sample(n: int = 200_000) -> pd.DataFrame:
     # Silver is ~60M+ rows (~5-8GB). Reading the full dataset into pandas OOMs
     # on a 16GB laptop, so sample per-fragment instead: each source_date partition
     # contributes a proportional share of the final sample.
-    dataset = ds.dataset(str(SILVER_DIR), partitioning="hive")
+    dataset = ds.dataset(str(SILVER_DIR), partitioning="hive", filesystem=S3_FS)
     fragments = list(dataset.get_fragments())
     if not fragments:
         return pd.DataFrame(

@@ -231,6 +231,36 @@ git commit -m "refresh dashboard data"
 git push
 ```
 
+### Reading data from AWS S3 (still free tier)
+
+Set `AIS_S3_BUCKET` (env var or Streamlit secret) to switch the dashboard
+from bundled parquet to S3. The app auto-detects and reads via
+`pyarrow.fs.S3FileSystem` — no code change needed.
+
+```bash
+# 1. Create bucket + upload parquet
+aws s3 mb s3://ais-maritime-<you> --region ap-southeast-1
+aws s3 sync data/gold          s3://ais-maritime-<you>/gold/          --delete
+aws s3 sync data/silver_sample s3://ais-maritime-<you>/silver_sample/ --delete
+```
+
+Create an IAM user (`ais-dashboard-reader`) with read-only policy scoped to
+this bucket, generate an access key, then in Streamlit Cloud → app Settings →
+**Secrets**:
+
+```toml
+AIS_S3_BUCKET       = "ais-maritime-<you>"
+AWS_ACCESS_KEY_ID   = "AKIA..."
+AWS_SECRET_ACCESS_KEY = "..."
+AWS_REGION          = "ap-southeast-1"
+```
+
+Save — Streamlit redeploys automatically. First load fetches ~28 MB from S3
+(~2 seconds); subsequent loads hit the 10-minute `cache_data` cache.
+
+Free-tier allowance: 5 GB storage + 20K GET + 2K PUT / month — this dataset
+uses <1% of all three.
+
 ### Spark Jobs (individual)
 
 ```bash
