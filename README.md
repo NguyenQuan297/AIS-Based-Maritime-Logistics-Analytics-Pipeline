@@ -187,8 +187,11 @@ metadata  activity        candidates
 ```bash
 # Prerequisites: Python 3.9+, Java 11+
 
-# Install
-pip install pyspark==3.5.3 zstandard pyarrow python-dotenv streamlit pydeck==0.7.1
+# Full pipeline (Spark, Airflow, ingestion)
+pip install -r requirements-pipeline.txt
+
+# Dashboard only (no Java/Spark required)
+pip install -r requirements.txt
 
 # Place .csv.zst files in data/raw/ais/
 
@@ -198,11 +201,34 @@ python main.py --sample
 # Run all files
 python main.py --all
 
-# Launch dashboard
+# Rebuild the small silver sample used by Streamlit Cloud
+python scripts/build_streamlit_sample.py
+
+# Launch dashboard locally
 streamlit run app.py
 
 # Run tests
 pytest tests/ -v
+```
+
+## Deploy dashboard on Streamlit Community Cloud (free)
+
+The repo commits `data/gold/` (~14 MB) and a sampled `data/silver_sample/` (~13 MB)
+so the dashboard is self-contained — no S3 or external storage needed.
+
+1. Push this repo to a **public** GitHub repository.
+2. Go to <https://share.streamlit.io>, click **New app**.
+3. Select the repo, branch `main`, main file path `app.py`.
+4. Click **Deploy**. Streamlit Cloud installs `requirements.txt` (dashboard-only,
+   no PySpark) and launches the app.
+
+To refresh the committed data, re-run the pipeline locally then:
+
+```bash
+python scripts/build_streamlit_sample.py
+git add data/gold data/silver_sample
+git commit -m "refresh dashboard data"
+git push
 ```
 
 ### Spark Jobs (individual)

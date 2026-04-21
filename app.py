@@ -11,6 +11,7 @@ Usage:
 import streamlit as st
 import pandas as pd
 import pyarrow.parquet as pq
+import pyarrow.dataset as ds
 import pydeck as pdk
 from pathlib import Path
 
@@ -29,43 +30,73 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 DATA_DIR = Path(__file__).parent / "data"
 GOLD_DIR = DATA_DIR / "gold"
-SILVER_DIR = DATA_DIR / "silver"
+# Full silver (~1GB, local dev). Fall back to small committed sample on
+# Streamlit Community Cloud where RAM is limited to 1GB.
+SILVER_DIR = DATA_DIR / "silver" if (DATA_DIR / "silver").exists() else DATA_DIR / "silver_sample"
+
+
+# Streamlit >=1.18 uses st.cache_data; older versions fall back to st.cache.
+cache_data = getattr(st, "cache_data", None)
+if cache_data is None:
+    def cache_data(**kwargs):
+        kwargs.pop("show_spinner", None)
+        return st.cache(allow_output_mutation=True, **kwargs)
 
 
 # ---------------------------------------------------------------------------
 # Load helpers (cached)
 # ---------------------------------------------------------------------------
-@st.cache(ttl=600, allow_output_mutation=True, show_spinner=True)
+@cache_data(ttl=600, show_spinner=True)
 def load_activity() -> pd.DataFrame:
     df = pq.read_table(str(GOLD_DIR / "vessel_daily_activity")).to_pandas()
     df["activity_date"] = pd.to_datetime(df["activity_date"]).dt.date
     return df
 
 
-@st.cache(ttl=600, allow_output_mutation=True, show_spinner=True)
+@cache_data(ttl=600, show_spinner=True)
 def load_voyages() -> pd.DataFrame:
     df = pq.read_table(str(GOLD_DIR / "voyage_candidates")).to_pandas()
     return df
 
 
-@st.cache(ttl=600, allow_output_mutation=True, show_spinner=True)
+@cache_data(ttl=600, show_spinner=True)
 def load_routes() -> pd.DataFrame:
     df = pq.read_table(str(GOLD_DIR / "route_metrics")).to_pandas()
     df["metric_date"] = pd.to_datetime(df["metric_date"]).dt.date
     return df
 
 
-@st.cache(ttl=600, allow_output_mutation=True, show_spinner=True)
+@cache_data(ttl=600, show_spinner=True)
 def load_metadata() -> pd.DataFrame:
     return pq.read_table(str(GOLD_DIR / "vessel_metadata")).to_pandas()
 
 
-@st.cache(ttl=600, allow_output_mutation=True, show_spinner=True)
+@cache_data(ttl=600, show_spinner=True)
 def load_silver_sample(n: int = 200_000) -> pd.DataFrame:
-    df = pq.read_table(
-        str(SILVER_DIR),
-        columns=["mmsi", "latitude", "longitude", "sog", "vessel_type", "event_time", "source_date"],
-    ).to_pandas()
+    # Silver is ~60M+ rows (~5-8GB). Reading the full dataset into pandas OOMs
+    # on a 16GB laptop, so sample per-fragment instead: each source_date partition
+    # contributes a proportional share of the final sample.
+    dataset = ds.dataset(str(SILVER_DIR), partitioning="hive")
+    fragments = list(dataset.get_fragments())
+    if not fragments:
+        return pd.DataFrame(
+            columns=["mmsi", "latitude", "longitude", "sog", "vessel_type", "event_time", "source_date"]
+        )
+    per_frag = max(n // len(fragments), 1000)
+    columns = ["mmsi", "latitude", "longitude", "sog", "vessel_type", "event_time"]
+    frames = []
+    for frag in fragments:
+        table = frag.to_table(columns=columns)
+        pdf = table.to_pandas()
+        if len(pdf) > per_frag:
+            pdf = pdf.sample(n=per_frag, random_state=42)
+        # Recover partition value (source_date) from the fragment path
+        try:
+            pdf["source_date"] = str(frag.partition_expression).split("=")[-1].strip(")").strip("'\"")
+        except Exception:
+            pdf["source_date"] = ""
+        frames.append(pdf)
+    df = pd.concat(frames, ignore_index=True)
     if len(df) > n:
         df = df.sample(n=n, random_state=42)
     return df

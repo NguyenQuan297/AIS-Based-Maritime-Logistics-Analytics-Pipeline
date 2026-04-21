@@ -78,6 +78,15 @@ def build_silver(spark: SparkSession, bronze_df: DataFrame, source_date: str) ->
         & F.col("longitude").isNotNull()
     )
 
+    # SOG 102.3 is the AIS "not available" sentinel; null it out before validation
+    df = df.withColumn(
+        "sog",
+        F.when(F.col("sog") >= 102.3, F.lit(None).cast(DoubleType())).otherwise(F.col("sog")),
+    )
+
+    # Null-island filter: (0,0) is GPS failure, not a real position
+    df = df.where(~((F.col("latitude") == 0.0) & (F.col("longitude") == 0.0)))
+
     # Step 5: Validate
     df = validate_row(df)
 
@@ -87,9 +96,10 @@ def build_silver(spark: SparkSession, bronze_df: DataFrame, source_date: str) ->
     # Add source_date for partitioning
     df = df.withColumn("source_date", F.lit(source_date))
 
-    # Write silver parquet (count happens during write, no extra scan)
+    # Write silver parquet. overwrite + partitionOverwriteMode=dynamic only replaces
+    # the current source_date partition, keeping prior days intact.
     output_path = str(PathConfig.SILVER_DIR)
-    df.write.mode("append").partitionBy("source_date").parquet(output_path)
+    df.write.mode("overwrite").partitionBy("source_date").parquet(output_path)
     logger.info("Silver data written to %s", output_path)
 
     return df

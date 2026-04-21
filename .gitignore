@@ -23,12 +23,18 @@ env/
 data/raw/
 data/bronze/
 data/silver/
-data/gold/
 data/samples/
-data/raw/
 *.csv
 *.csv.zst
 *.parquet
+# Spark/Hadoop checksum sidecars
+*.crc
+.part-*.crc
+# Exceptions: gold tables + sampled silver are committed for Streamlit Cloud demo
+!data/gold/
+!data/gold/**
+!data/silver_sample/
+!data/silver_sample/**
 
 # Spark
 metastore_db/

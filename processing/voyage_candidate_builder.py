@@ -64,14 +64,16 @@ def build_voyage_candidates(spark: SparkSession, silver_df: DataFrame) -> DataFr
         F.sum("new_voyage").over(vessel_window),
     )
 
-    # Aggregate voyage segments
+    # Aggregate voyage segments.
+    # min_by/max_by pick the position at min/max event_time — deterministic,
+    # unlike F.first/F.last which don't respect any ordering after groupBy.
     voyages = df.groupBy("mmsi", "voyage_id").agg(
         F.min("event_time").alias("start_time"),
         F.max("event_time").alias("end_time"),
-        F.first("longitude").alias("start_longitude"),
-        F.first("latitude").alias("start_latitude"),
-        F.last("longitude").alias("end_longitude"),
-        F.last("latitude").alias("end_latitude"),
+        F.min_by("longitude", "event_time").alias("start_longitude"),
+        F.min_by("latitude", "event_time").alias("start_latitude"),
+        F.max_by("longitude", "event_time").alias("end_longitude"),
+        F.max_by("latitude", "event_time").alias("end_latitude"),
         F.count("*").alias("point_count"),
         F.round(F.avg("sog"), 2).alias("avg_sog"),
     )
@@ -97,15 +99,17 @@ def build_voyage_candidates(spark: SparkSession, silver_df: DataFrame) -> DataFr
     # Filter minimum points
     voyages = voyages.where(F.col("point_count") >= MIN_VOYAGE_POINTS)
 
-    # Drop internal voyage_id
+    # Drop internal voyage_id; add start_date partition column
     voyages = voyages.drop("voyage_id")
+    voyages = voyages.withColumn("start_date", F.to_date("start_time"))
 
     row_count = voyages.count()
     logger.info("Voyage candidates: %d segments", row_count)
 
-    # Write
+    # Write. overwrite + dynamic partitionOverwriteMode only replaces partitions
+    # for dates present in this run (set in spark_session), keeping prior days.
     output_path = str(PathConfig.GOLD_VOYAGE_DIR)
-    voyages.write.mode("append").parquet(output_path)
+    voyages.write.mode("overwrite").partitionBy("start_date").parquet(output_path)
     logger.info("Voyage candidates written to %s", output_path)
 
     return voyages

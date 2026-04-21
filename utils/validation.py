@@ -17,9 +17,10 @@ def validate_coordinates(df: DataFrame) -> DataFrame:
 
 
 def validate_sog(df: DataFrame) -> DataFrame:
-    """Filter rows with valid speed over ground."""
+    """Filter rows with valid speed over ground. Null SOG is allowed (AIS sentinel)."""
     return df.where(
-        (F.col("sog") >= 0) & (F.col("sog") <= Settings.SOG_MAX)
+        F.col("sog").isNull()
+        | ((F.col("sog") >= 0) & (F.col("sog") < Settings.SOG_MAX))
     )
 
 

@@ -62,9 +62,9 @@ def build_route_metrics(spark: SparkSession, voyages_df: DataFrame) -> DataFrame
     row_count = metrics.count()
     logger.info("Route metrics: %d records", row_count)
 
-    # Write
+    # Write — route_metrics is rebuilt from all voyages each run, so full overwrite.
     output_path = str(PathConfig.GOLD_ROUTE_DIR)
-    metrics.write.mode("append").partitionBy("metric_date").parquet(output_path)
+    metrics.write.mode("overwrite").partitionBy("metric_date").parquet(output_path)
     logger.info("Route metrics written to %s", output_path)
 
     return metrics

@@ -44,9 +44,9 @@ def build_daily_activity(spark: SparkSession, silver_df: DataFrame) -> DataFrame
     row_count = activity.count()
     logger.info("Daily activity: %d vessel-day records", row_count)
 
-    # Write
+    # Write — overwrite with dynamic partition mode only replaces the current day.
     output_path = str(PathConfig.GOLD_ACTIVITY_DIR)
-    activity.write.mode("append").partitionBy("activity_date").parquet(output_path)
+    activity.write.mode("overwrite").partitionBy("activity_date").parquet(output_path)
     logger.info("Activity data written to %s", output_path)
 
     return activity
