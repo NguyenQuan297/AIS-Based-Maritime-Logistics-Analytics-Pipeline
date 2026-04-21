@@ -35,6 +35,9 @@ data/samples/
 !data/gold/**
 !data/silver_sample/
 !data/silver_sample/**
+# ...but Spark sidecar files are still junk even under the exceptions
+data/**/*.crc
+data/**/_SUCCESS
 
 # Spark
 metastore_db/
