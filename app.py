@@ -341,7 +341,7 @@ with map_col1:
             deck = pdk.Deck(
                 layers=[heat_layer],
                 initial_view_state=view_state,
-                map_style="mapbox://styles/mapbox/dark-v10",
+                map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
             )
         else:
             # Scatter points with bright, high-contrast colors
@@ -390,7 +390,7 @@ with map_col1:
                 layers=[scatter_layer],
                 initial_view_state=view_state,
                 tooltip={"text": "MMSI: {mmsi}\nSOG: {sog} kn\nType: {vessel_type}"},
-                map_style="mapbox://styles/mapbox/dark-v10",
+                map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
             )
 
         st.pydeck_chart(deck)
@@ -554,7 +554,7 @@ with tab3:
                     layers=[track_layer, path_layer],
                     initial_view_state=track_view,
                     tooltip={"text": "SOG: {sog} kn"},
-                    map_style="mapbox://styles/mapbox/dark-v10",
+                    map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
                 )
                 st.pydeck_chart(track_deck)
 
@@ -635,7 +635,7 @@ if not filtered_voyages.empty:
                 layers=[arc_layer],
                 initial_view_state=arc_view,
                 tooltip={"text": "MMSI: {mmsi}\nType: {candidate_route_type}\nDuration: {duration_hours}h\nSpeed: {avg_sog} kn"},
-                map_style="mapbox://styles/mapbox/dark-v10",
+                map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
             )
             st.pydeck_chart(arc_deck)
         else:
