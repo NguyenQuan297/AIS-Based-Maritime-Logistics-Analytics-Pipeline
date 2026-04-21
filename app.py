@@ -146,13 +146,38 @@ def load_silver_sample(n: int = 200_000) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Sidebar: show data source + config BEFORE any load so errors don't hide it
+# ---------------------------------------------------------------------------
+st.sidebar.title("Filters")
+st.sidebar.caption(f"Data source — {DATA_SOURCE_LABEL}")
+
+# Also emit config to stdout so it appears in Streamlit Cloud logs
+print(
+    f"[config] S3_BUCKET={S3_BUCKET!r} AWS_REGION={AWS_REGION!r} "
+    f"has_access_key={bool(_get_secret('AWS_ACCESS_KEY_ID'))} "
+    f"key_prefix={_get_secret('AWS_ACCESS_KEY_ID')[:4]}",
+    flush=True,
+)
+
+# ---------------------------------------------------------------------------
 # Load data
 # ---------------------------------------------------------------------------
-activity = load_activity()
-voyages = load_voyages()
-routes = load_routes()
-metadata = load_metadata()
-positions = load_silver_sample()
+try:
+    activity = load_activity()
+    voyages = load_voyages()
+    routes = load_routes()
+    metadata = load_metadata()
+    positions = load_silver_sample()
+except Exception as e:
+    st.error(f"Failed to load data — source: {DATA_SOURCE_LABEL}")
+    st.code(f"{type(e).__name__}: {e}")
+    st.info(
+        "If reading from S3: verify IAM policy on the access-key user grants "
+        "s3:GetObject + s3:ListBucket on both the bucket ARN and bucket/*. "
+        "Check Streamlit Cloud secrets TOML has all 4 keys: "
+        "AIS_S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION."
+    )
+    st.stop()
 
 # Merge vessel names into activity
 activity_enriched = activity.merge(
@@ -160,12 +185,6 @@ activity_enriched = activity.merge(
     on="mmsi",
     how="left",
 )
-
-# ---------------------------------------------------------------------------
-# Sidebar filters
-# ---------------------------------------------------------------------------
-st.sidebar.title("Filters")
-st.sidebar.caption(f"Data source — {DATA_SOURCE_LABEL}")
 
 # Date filter
 available_dates = sorted(activity["activity_date"].unique())
