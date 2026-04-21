@@ -146,12 +146,13 @@ def load_silver_sample(n: int = 200_000) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Sidebar: show data source + config BEFORE any load so errors don't hide it
+# Sidebar set up early so if data loading crashes, the error message appears
+# above the filters rather than replacing the whole page.
 # ---------------------------------------------------------------------------
 st.sidebar.title("Filters")
-st.sidebar.caption(f"Data source — {DATA_SOURCE_LABEL}")
 
-# Also emit config to stdout so it appears in Streamlit Cloud logs
+# Log-only config trace (not shown to end users). Useful when debugging S3
+# credential / region issues from Streamlit Cloud logs.
 print(
     f"[config] S3_BUCKET={S3_BUCKET!r} AWS_REGION={AWS_REGION!r} "
     f"has_access_key={bool(_get_secret('AWS_ACCESS_KEY_ID'))} "
