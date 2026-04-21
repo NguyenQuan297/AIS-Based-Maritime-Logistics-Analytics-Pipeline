@@ -51,21 +51,27 @@ def _get_secret(name: str, default: str = "") -> str:
 
 
 S3_BUCKET = _get_secret("AIS_S3_BUCKET").removeprefix("s3://").rstrip("/")
+# Match the region used in the setup README. pyarrow + region mismatch
+# surfaces as "ACCESS_DENIED during HeadObject: No response body" — extremely
+# confusing, so we default to us-east-2 instead of leaving it blank.
+AWS_REGION = _get_secret("AWS_REGION", "us-east-2")
 
 if S3_BUCKET:
     S3_FS = pafs.S3FileSystem(
         access_key=_get_secret("AWS_ACCESS_KEY_ID") or None,
         secret_key=_get_secret("AWS_SECRET_ACCESS_KEY") or None,
-        region=_get_secret("AWS_REGION", "ap-southeast-1"),
+        region=AWS_REGION,
     )
     GOLD_DIR = f"{S3_BUCKET}/gold"
     SILVER_DIR = f"{S3_BUCKET}/silver_sample"
+    DATA_SOURCE_LABEL = f"S3: `{S3_BUCKET}` @ `{AWS_REGION}`"
 else:
     S3_FS = None
     GOLD_DIR = DATA_DIR / "gold"
     SILVER_DIR = (
         DATA_DIR / "silver" if (DATA_DIR / "silver").exists() else DATA_DIR / "silver_sample"
     )
+    DATA_SOURCE_LABEL = f"Local: `{SILVER_DIR.name}` + `gold/`"
 
 
 def _read_parquet(path) -> pd.DataFrame:
@@ -159,6 +165,7 @@ activity_enriched = activity.merge(
 # Sidebar filters
 # ---------------------------------------------------------------------------
 st.sidebar.title("Filters")
+st.sidebar.caption(f"Data source — {DATA_SOURCE_LABEL}")
 
 # Date filter
 available_dates = sorted(activity["activity_date"].unique())
